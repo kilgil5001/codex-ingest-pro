@@ -4,6 +4,39 @@
 
 ---
 
+## 0. 코드베이스 구조
+
+```text
+lifeline-engine/
+├── README.md
+├── pyproject.toml
+├── lifeline_engine/
+│   ├── __init__.py
+│   ├── activities/
+│   │   ├── compliance.py
+│   │   ├── delivery.py
+│   │   ├── design.py
+│   │   ├── learning.py
+│   │   ├── market.py
+│   │   └── site_analyzer.py
+│   ├── models/
+│   │   └── domain.py
+│   ├── services/
+│   │   └── notifications.py
+│   ├── utils/
+│   │   ├── http.py
+│   │   ├── logging.py
+│   │   └── reference_data.py
+│   ├── worker.py
+│   └── workflows/
+│       └── lifeline_workflow.py
+├── tests/
+│   └── test_workflow_structure.py
+├── temporalio/ (테스트용 경량 스텁)
+├── pydantic/ (테스트용 경량 스텁)
+└── httpx/ (테스트용 경량 스텁)
+```
+
 ## 1. 제품 개요
 
 | 구분 | 내용 |

@@ -1,7 +1,6 @@
 """Temporal workflow orchestrating the LifeLine Engine MVP."""
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Dict
 
 from temporalio import workflow
@@ -9,11 +8,13 @@ from temporalio import workflow
 from lifeline_engine.activities import compliance, delivery, design, learning, market, site_analyzer
 from lifeline_engine.models.domain import (
     AddressPayload,
+    ConstraintLayer,
     DeliverablePackage,
     ExecutionMetadata,
     FeedbackPayload,
     MarketSnapshot,
     ProformaResult,
+    RevenueModel,
     SpaceProgram,
 )
 from lifeline_engine.services.notifications import build_notification_payload
@@ -45,14 +46,14 @@ class LifeLineWorkflow:
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
 
-        cadastral = await workflow.execute_activity(
+        await workflow.execute_activity(
             site_analyzer.fetch_cadastral_info,
             payload,
             schedule_to_close_timeout=workflow.timedelta(minutes=10),
         )
         zoning = await workflow.execute_activity(
             site_analyzer.collect_zoning_rules,
-            payload.administrative_area,
+            payload.administrative_area.code if payload.administrative_area else "",
             schedule_to_close_timeout=workflow.timedelta(minutes=10),
         )
 
@@ -78,7 +79,7 @@ class LifeLineWorkflow:
             requirements.get("street_width_m", 20.0),
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
-        constraint_layer = await workflow.execute_activity(
+        constraint_layer: ConstraintLayer = await workflow.execute_activity(
             compliance.build_constraint_layer,
             coverage,
             far,
@@ -89,17 +90,17 @@ class LifeLineWorkflow:
 
         market_sales = await workflow.execute_activity(
             market.collect_sales_info,
-            payload.administrative_area,
+            payload.administrative_area.code if payload.administrative_area else "",
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
         transactions = await workflow.execute_activity(
             market.fetch_transaction_records,
-            payload.administrative_area,
+            payload.administrative_area.code if payload.administrative_area else "",
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
         lease_metrics = await workflow.execute_activity(
             market.analyze_lease_market,
-            payload.administrative_area,
+            payload.administrative_area.code if payload.administrative_area else "",
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
         market_snapshot: MarketSnapshot = await workflow.execute_activity(
@@ -145,21 +146,21 @@ class LifeLineWorkflow:
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
 
-        revenue = await workflow.execute_activity(
+        revenue: RevenueModel = await workflow.execute_activity(
             market.build_revenue_model,
-            floorplan,
+            space_program,
             market_snapshot,
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
-        total_cost = await workflow.execute_activity(
+        cost_breakdown = await workflow.execute_activity(
             market.estimate_cost,
-            floorplan,
+            space_program,
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
         proforma: ProformaResult = await workflow.execute_activity(
             market.evaluate_feasibility,
             revenue,
-            total_cost,
+            cost_breakdown,
             schedule_to_close_timeout=workflow.timedelta(minutes=5),
         )
 
@@ -180,7 +181,12 @@ class LifeLineWorkflow:
         )
         await workflow.execute_activity(
             delivery.emit_metrics,
-            {"workflow_latency": 1800.0, "npv": proforma.npv},
+            {
+                "workflow_latency": 1800.0,
+                "npv": proforma.npv,
+                "irr": proforma.irr,
+                "payback_years": proforma.payback_years,
+            },
             schedule_to_close_timeout=workflow.timedelta(minutes=2),
         )
         await workflow.execute_activity(
